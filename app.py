@@ -238,4 +238,7 @@ df['7d_Disapproved_Percentage'] = df['7d_Disapproved_Percentage'].apply(lambda x
 
 st.title("Disapproved Ads Stats")
 
-st.dataframe(df[['business_name','email','ad_account_id','status','currency','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','total_ads_last7days','disapproved_ads_last7days','7d_Disapproved_Percentage','7d_spends','current_month_spends','30d_spends','lifetime_spends']],use_container_width=True)
+# st.dataframe(df[['buid','business_name','email','ad_account_id','status','currency','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','total_ads_last7days','disapproved_ads_last7days','7d_Disapproved_Percentage','7d_spends','current_month_spends','30d_spends','lifetime_spends']],use_container_width=True)
+
+
+st.dataframe(df[['buid','business_name','email','ad_account_id','status','currency','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','total_ads_last7days','disapproved_ads_last7days','7d_Disapproved_Percentage']],use_container_width=True)
