@@ -2,11 +2,11 @@ from curses.ascii import alt
 from datetime import date, datetime, timedelta
 from urllib.error import URLError
 import pandas as pd
+import numpy as np
 import streamlit as st
 from streamlit_option_menu import option_menu
 import psycopg2
 from functools import wraps
-import pandas as pd
 import hmac
 import boto3
 import json
@@ -78,40 +78,43 @@ def redshift_connection(dbname, user, password, host, port):
     return decorator
 
 query = '''
-SELECT buid,bu.name as business_name,bu.email as email,a.ad_account_id,b.currency,case when flag = 'Disabled' then flag else 'Active' end as status,disable_date,disable_reason,
+SELECT buid,bu.name as business_name,bu.email as email,a.ad_account_id,b.currency,
+case when flag='Others' then 'Active' else COALESCE(flag,'Active') end as status,disable_date,disable_reason,
 sum(case when ad_status = 'APPROVED' then 1 else 0 end) as total_ads,
 sum(case when ad_status = 'DISAPPROVED' then 1 else 0 end) as disapproved_ads,
+sum(case when (ad_status = 'APPROVED' and date(status_date)>=current_date-7) then 1 else 0 end) as total_ads_last7days,
+sum(case when (ad_status = 'DISAPPROVED' and date(status_date)>=current_date-7) then 1 else 0 end) as disapproved_ads_last7days,
 sum(sevend_spends) as "7d_spends",
 sum(current_month_spends) as current_month_spends,
 sum(thirtyd_spends) as "30d_spends",
 sum(lifetime_spends) as lifetime_spends
--- (sum(case when ad_status = 'DISAPPROVED' then 1 else 0 end )/ (ifnull(sum(case when ad_status = 'APPROVED' then 1 else 0 end),0)) 
 from
 (
-SELECT a.ad_account_id,a.ad_id,ad_status,effective_status,status_date,ad_review_feedback,b.*
+SELECT a.ad_account_id,a.ad_id,ad_status,effective_status,status_date,ad_review_feedback
  FROM
 (
 SELECT a.ad_account_id,ad_id,ad_status,effective_status,status_date,ad_review_feedback
  FROM
 (
-select fad.ad_account_id,ad_id, case when effective_status ='DISAPPROVED' then 'DISAPPROVED' else 'APPROVED' end as ad_status,effective_status, date(fad.updated_at) as status_date,
+select fad.ad_account_id,ad_id, 
+case when effective_status ='DISAPPROVED' then 'DISAPPROVED' else 'APPROVED' end as ad_status,effective_status,
+ date(fad.updated_at) as status_date,
 row_number() over(PARTITION by ad_id order by date(fad.updated_at) desc) as rw,ad_review_feedback
 from zocket_global.fb_ads_details_v3 fad
 join zocket_global.fb_child_ad_accounts fcaa on fad.ad_account_id = fcaa.ad_account_id
-where status_date>current_date-7
 )a
 where rw=1
 ) a
+) a
 left JOIN
-(select ad_id,
-SUM(CASE WHEN date(date_start) > CURRENT_DATE - INTERVAL '7 DAY' THEN spend ELSE 0 END) AS "sevend_spends",
-SUM(CASE WHEN date(date_start) > CURRENT_DATE - INTERVAL '30 DAY' THEN spend ELSE 0 END) AS "thirtyd_spends",
-SUM( CASE WHEN date_start >= DATE_TRUNC('month', CURRENT_DATE) THEN spend ELSE 0 END) AS current_month_spends,
-sum(spend) as lifetime_spends from zocket_global.fb_ads_age_gender_metrics_v3 faag
+(select ad_account_id,
+SUM(CASE WHEN date(date_start) > CURRENT_DATE - INTERVAL '7 DAY' THEN spend::float ELSE 0 END) AS "sevend_spends",
+SUM(CASE WHEN date(date_start) > CURRENT_DATE - INTERVAL '30 DAY' THEN spend::float ELSE 0 END) AS "thirtyd_spends",
+SUM( CASE WHEN date_start >= DATE_TRUNC('month', CURRENT_DATE) THEN spend::float ELSE 0 END) AS current_month_spends,
+sum(spend) as lifetime_spends from zocket_global.ad_account_spends aas
 group by 1
 order by 4 desc
-) b on a.ad_id = b.ad_id
-) a
+)s on a.ad_account_id = s.ad_account_id
 left join (
     select ad_account_id,buid,created_at,prev_date,currency
 from
@@ -194,9 +197,10 @@ FROM
 WHERE
     json_extract_path_text(json_extract_array_element_text(business_user_ids, 0), 'role') = 'owner' )bp on e.app_business_id=bp.id
 left join enterprise_users eu on c.app_business_id=eu.euid
+-- where a.ad_account_id='act_635291785907397'
 order by 3
 )
--- where ad_account_id='act_1808607866379064'
+-- where ad_account_id='act_635291785907397'
 order by ad_account_id
 )
     )
@@ -205,7 +209,6 @@ order by ad_account_id
 )da on a.ad_account_id=da.ad_account_id
 -- where a.ad_account_id='act_1808607866379064'
 group by 1,2,3,4,5,6,7,8
-
     '''
 
 
@@ -225,9 +228,14 @@ df = execute_query(query=query)
 
 df['Disapproved_Percentage'] = df['disapproved_ads'] / df['total_ads']
 df['Disapproved_Percentage'] = df['Disapproved_Percentage'].fillna(0)
-df['Disapproved_Percentage'] = df['Disapproved_Percentage'].apply(lambda x: round(x, 2))
-df['Disapproved_Percentage'] = df['Disapproved_Percentage'].apply(lambda x: f"{x*100}%")
+df['Disapproved_Percentage'] = df['Disapproved_Percentage'].apply(lambda x: "0%" if pd.isna(x) or np.isinf(x) or x == 0 else f"{round(x*100):.0f}%")
+
+
+df['7d_Disapproved_Percentage'] = df['disapproved_ads_last7days'] / df['total_ads_last7days']
+df['7d_Disapproved_Percentage'] = df['7d_Disapproved_Percentage'].fillna(0)
+df['7d_Disapproved_Percentage'] = df['7d_Disapproved_Percentage'].apply(lambda x: "0%" if pd.isna(x) or np.isinf(x) or x == 0 else f"{round(x*100):.0f}%")
+
 
 st.title("Disapproved Ads Stats")
 
-st.dataframe(df,use_container_width=True)
+st.dataframe(df[['business_name','email','ad_account_id','status','currency','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','total_ads_last7days','disapproved_ads_last7days','7d_Disapproved_Percentage','7d_spends','current_month_spends','30d_spends','lifetime_spends']],use_container_width=True)
