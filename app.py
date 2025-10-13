@@ -386,3 +386,4 @@ st.title("Overall Disapproved Ads Stats")
 
 st.dataframe(df[['buid','business_name','email','ad_account_id','currency','status','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','total_ads_last7days','disapproved_ads_last7days','7d_Disapproved_Percentage']],use_container_width=True)
 
+st.dataframe(df_yesterday,use_container_width=True)
