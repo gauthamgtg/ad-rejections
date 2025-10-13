@@ -79,15 +79,15 @@ def redshift_connection(dbname, user, password, host, port):
 
 query = '''
 SELECT buid,bu.name as business_name,bu.email as email,a.ad_account_id,b.currency,
+(sevend_spends) as "7d_spends",
+(current_month_spends) as current_month_spends,
+(thirtyd_spends) as "30d_spends",
+(lifetime_spends) as lifetime_spends,
 case when flag='Others' then 'Active' else COALESCE(flag,'Active') end as status,disable_date,disable_reason,
 sum(case when ad_status = 'APPROVED' then 1 else 0 end) as total_ads,
 sum(case when ad_status = 'DISAPPROVED' then 1 else 0 end) as disapproved_ads,
 sum(case when (ad_status = 'APPROVED' and date(edited_at)>=current_date-7) then 1 else 0 end) as total_ads_last7days,
-sum(case when (ad_status = 'DISAPPROVED' and date(edited_at)>=current_date-7) then 1 else 0 end) as disapproved_ads_last7days,
-sum(sevend_spends) as "7d_spends",
-sum(current_month_spends) as current_month_spends,
-sum(thirtyd_spends) as "30d_spends",
-sum(lifetime_spends) as lifetime_spends
+sum(case when (ad_status = 'DISAPPROVED' and date(edited_at)>=current_date-7) then 1 else 0 end) as disapproved_ads_last7days
 from
 (
 SELECT a.ad_account_id,a.ad_id,ad_status,effective_status,edited_at,ad_review_feedback
@@ -107,11 +107,24 @@ where rw=1
 ) a
 ) a
 left JOIN
-(select ad_account_id,
-SUM(CASE WHEN date(date_start) > CURRENT_DATE - INTERVAL '7 DAY' THEN spend::float ELSE 0 END) AS "sevend_spends",
-SUM(CASE WHEN date(date_start) > CURRENT_DATE - INTERVAL '30 DAY' THEN spend::float ELSE 0 END) AS "thirtyd_spends",
-SUM( CASE WHEN date_start >= DATE_TRUNC('month', CURRENT_DATE) THEN spend::float ELSE 0 END) AS current_month_spends,
-sum(spend) as lifetime_spends from zocket_global.ad_account_spends aas
+(
+    select ad_account_id,
+SUM(CASE WHEN date(dt) > CURRENT_DATE - INTERVAL '7 DAY' THEN spend::float ELSE 0 END) AS "sevend_spends",
+SUM(CASE WHEN date(dt) > CURRENT_DATE - INTERVAL '30 DAY' THEN spend::float ELSE 0 END) AS "thirtyd_spends",
+SUM( CASE WHEN dt >= DATE_TRUNC('month', CURRENT_DATE) THEN spend::float ELSE 0 END) AS current_month_spends,
+sum(spend) as lifetime_spends from 
+(SELECT  ad_account_id,date(date_start) as dt,max(spend)spend
+    from 
+    (
+    select ad_account_id,date(date_start) as date_start,spend,'public' from ad_account_spends 
+    union ALL
+    select ad_account_id,date(date_start) as date_start,spend,'global' from zocket_global.ad_account_spends
+    )aas
+	group by 1,2
+    ORDER by 2
+   )aas
+    --    where ad_account_id='act_621862387097953'
+
 group by 1
 order by 4 desc
 )s on a.ad_account_id = s.ad_account_id
@@ -207,19 +220,21 @@ order by ad_account_id
     )
     where rw=1 
 )da on a.ad_account_id=da.ad_account_id
--- where a.ad_account_id='act_1808607866379064'
-group by 1,2,3,4,5,6,7,8
+-- where a.ad_account_id='act_621862387097953'
+group by 1,2,3,4,5,6,7,8,9,10,11,12
     '''
 
 yesterday_query = '''
 SELECT buid,bu.name as business_name,bu.email as email,a.ad_account_id,b.currency,
+(sevend_spends) as "7d_spends",
+(current_month_spends) as current_month_spends,
+(thirtyd_spends) as "30d_spends",
+(lifetime_spends) as lifetime_spends,
 case when flag='Others' then 'Active' else COALESCE(flag,'Active') end as status,disable_date,disable_reason,
 sum(case when ad_status = 'APPROVED' then 1 else 0 end) as total_ads,
 sum(case when ad_status = 'DISAPPROVED' then 1 else 0 end) as disapproved_ads,
-sum(sevend_spends) as "7d_spends",
-sum(current_month_spends) as current_month_spends,
-sum(thirtyd_spends) as "30d_spends",
-sum(lifetime_spends) as lifetime_spends
+sum(case when (ad_status = 'APPROVED' and date(edited_at)>=current_date-7) then 1 else 0 end) as total_ads_last7days,
+sum(case when (ad_status = 'DISAPPROVED' and date(edited_at)>=current_date-7) then 1 else 0 end) as disapproved_ads_last7days
 from
 (
 SELECT a.ad_account_id,a.ad_id,ad_status,effective_status,edited_at,ad_review_feedback
@@ -240,11 +255,24 @@ where rw=1
 ) a
 ) a
 left JOIN
-(select ad_account_id,
-SUM(CASE WHEN date(date_start) > CURRENT_DATE - INTERVAL '7 DAY' THEN spend::float ELSE 0 END) AS "sevend_spends",
-SUM(CASE WHEN date(date_start) > CURRENT_DATE - INTERVAL '30 DAY' THEN spend::float ELSE 0 END) AS "thirtyd_spends",
-SUM( CASE WHEN date_start >= DATE_TRUNC('month', CURRENT_DATE) THEN spend::float ELSE 0 END) AS current_month_spends,
-sum(spend) as lifetime_spends from zocket_global.ad_account_spends aas
+(
+    select ad_account_id,
+SUM(CASE WHEN date(dt) > CURRENT_DATE - INTERVAL '7 DAY' THEN spend::float ELSE 0 END) AS "sevend_spends",
+SUM(CASE WHEN date(dt) > CURRENT_DATE - INTERVAL '30 DAY' THEN spend::float ELSE 0 END) AS "thirtyd_spends",
+SUM( CASE WHEN dt >= DATE_TRUNC('month', CURRENT_DATE) THEN spend::float ELSE 0 END) AS current_month_spends,
+sum(spend) as lifetime_spends from 
+(SELECT  ad_account_id,date(date_start) as dt,max(spend)spend
+    from 
+    (
+    select ad_account_id,date(date_start) as date_start,spend,'public' from ad_account_spends 
+    union ALL
+    select ad_account_id,date(date_start) as date_start,spend,'global' from zocket_global.ad_account_spends
+    )aas
+	group by 1,2
+    ORDER by 2
+   )aas
+    --    where ad_account_id='act_621862387097953'
+
 group by 1
 order by 4 desc
 )s on a.ad_account_id = s.ad_account_id
@@ -340,8 +368,8 @@ order by ad_account_id
     )
     where rw=1 
 )da on a.ad_account_id=da.ad_account_id
--- where a.ad_account_id='act_1808607866379064'
-group by 1,2,3,4,5,6,7,8
+-- where a.ad_account_id='act_621862387097953'
+group by 1,2,3,4,5,6,7,8,9,10,11,12
 '''
 
 @st.cache_data(ttl=36400)  # 86400 seconds = 24 hours
@@ -375,15 +403,15 @@ df_yesterday['Disapproved_Percentage'] = df_yesterday['Disapproved_Percentage'].
 st.title("Disapproved Ads Stats")
 
 
-st.title("Daily Disapproved Ads Stats")
+st.title("Yesterday Disapproved Ads Stats")
 
 
-st.dataframe(df_yesterday[['buid','business_name','email','ad_account_id','currency','status','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage']],use_container_width=True)
+st.dataframe(df_yesterday[['buid','business_name','email','ad_account_id','currency','status','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','7d_spends','current_month_spends','30d_spends','lifetime_spends']],use_container_width=True)
 
 
 
 st.title("Overall Disapproved Ads Stats")
 
-st.dataframe(df[['buid','business_name','email','ad_account_id','currency','status','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','total_ads_last7days','disapproved_ads_last7days','7d_Disapproved_Percentage']],use_container_width=True)
+st.dataframe(df[['buid','business_name','email','ad_account_id','currency','status','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','total_ads_last7days','disapproved_ads_last7days','7d_Disapproved_Percentage','7d_spends','current_month_spends','30d_spends','lifetime_spends']],use_container_width=True)
 
-st.dataframe(df_yesterday,use_container_width=True)
+# st.dataframe(df_yesterday,use_container_width=True)
