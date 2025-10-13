@@ -86,19 +86,19 @@ SELECT buid,bu.name as business_name,bu.email as email,a.ad_account_id,b.currenc
 case when flag='Others' then 'Active' else COALESCE(flag,'Active') end as status,disable_date,disable_reason,
 sum(case when ad_status = 'APPROVED' then 1 else 0 end) as total_ads,
 sum(case when ad_status = 'DISAPPROVED' then 1 else 0 end) as disapproved_ads,
-sum(case when (ad_status = 'APPROVED' and date(edited_at)>=current_date-7) then 1 else 0 end) as total_ads_last7days,
+sum(case when (ad_status = 'APPROVED' and date(a.created_at)>=current_date-7) then 1 else 0 end) as total_ads_last7days,
 sum(case when (ad_status = 'DISAPPROVED' and date(edited_at)>=current_date-7) then 1 else 0 end) as disapproved_ads_last7days
 from
 (
-SELECT a.ad_account_id,a.ad_id,ad_status,effective_status,edited_at,ad_review_feedback
+SELECT a.ad_account_id,a.ad_id,ad_status,effective_status,edited_at,ad_review_feedback,a.created_at
  FROM
 (
-SELECT a.ad_account_id,ad_id,ad_status,effective_status,edited_at,ad_review_feedback
+SELECT a.ad_account_id,ad_id,ad_status,effective_status,edited_at,a.created_at,ad_review_feedback
  FROM
 (
 select fad.ad_account_id,ad_id, 
 case when effective_status ='DISAPPROVED' then 'DISAPPROVED' else 'APPROVED' end as ad_status,effective_status,
- date(fad.edited_at) as edited_at,
+ date(fad.edited_at) as edited_at, date(fad.created_date) as created_at,
 row_number() over(PARTITION by ad_id order by date(fad.edited_at) desc) as rw,ad_review_feedback
 from zocket_global.fb_ads_details_v3 fad
 join zocket_global.fb_child_ad_accounts fcaa on fad.ad_account_id = fcaa.ad_account_id
@@ -224,8 +224,7 @@ order by ad_account_id
 group by 1,2,3,4,5,6,7,8,9,10,11,12
     '''
 
-yesterday_query = '''
-SELECT buid,bu.name as business_name,bu.email as email,a.ad_account_id,b.currency,
+yesterday_query = '''SELECT buid,bu.name as business_name,bu.email as email,a.ad_account_id,b.currency,
 (sevend_spends) as "7d_spends",
 (current_month_spends) as current_month_spends,
 (thirtyd_spends) as "30d_spends",
@@ -233,19 +232,19 @@ SELECT buid,bu.name as business_name,bu.email as email,a.ad_account_id,b.currenc
 case when flag='Others' then 'Active' else COALESCE(flag,'Active') end as status,disable_date,disable_reason,
 sum(case when ad_status = 'APPROVED' then 1 else 0 end) as total_ads,
 sum(case when ad_status = 'DISAPPROVED' then 1 else 0 end) as disapproved_ads,
-sum(case when (ad_status = 'APPROVED' and date(edited_at)>=current_date-7) then 1 else 0 end) as total_ads_last7days,
+sum(case when (ad_status = 'APPROVED' and date(a.created_at)>=current_date-7) then 1 else 0 end) as total_ads_last7days,
 sum(case when (ad_status = 'DISAPPROVED' and date(edited_at)>=current_date-7) then 1 else 0 end) as disapproved_ads_last7days
 from
 (
-SELECT a.ad_account_id,a.ad_id,ad_status,effective_status,edited_at,ad_review_feedback
+SELECT a.ad_account_id,a.ad_id,ad_status,effective_status,edited_at,ad_review_feedback,a.created_at
  FROM
 (
-SELECT a.ad_account_id,ad_id,ad_status,effective_status,edited_at,ad_review_feedback
+SELECT a.ad_account_id,ad_id,ad_status,effective_status,edited_at,a.created_at,ad_review_feedback
  FROM
 (
 select fad.ad_account_id,ad_id, 
 case when effective_status ='DISAPPROVED' then 'DISAPPROVED' else 'APPROVED' end as ad_status,effective_status,
- date(fad.edited_at) as edited_at,
+ date(fad.edited_at) as edited_at, date(fad.created_date) as created_at,
 row_number() over(PARTITION by ad_id order by date(fad.edited_at) desc) as rw,ad_review_feedback
 from zocket_global.fb_ads_details_v3 fad
 join zocket_global.fb_child_ad_accounts fcaa on fad.ad_account_id = fcaa.ad_account_id
