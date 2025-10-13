@@ -248,7 +248,7 @@ case when effective_status ='DISAPPROVED' then 'DISAPPROVED' else 'APPROVED' end
 row_number() over(PARTITION by ad_id order by date(fad.edited_at) desc) as rw,ad_review_feedback
 from zocket_global.fb_ads_details_v3 fad
 join zocket_global.fb_child_ad_accounts fcaa on fad.ad_account_id = fcaa.ad_account_id
-where date(fad.edited_at)=current_date-1 and effective_status='DISAPPROVED'
+where date(fad.edited_at)=current_date-1
 )a
 where rw=1
 ) a
