@@ -38,6 +38,10 @@ st.set_page_config( page_title = "Ads Dashboard",
     layout="wide",
     initial_sidebar_state="expanded")
 
+# Configure Streamlit to handle larger datasets
+# This increases the message size limit to handle large dataframes
+st.config.set_option('server.maxMessageSize', 500)
+
 # st.toast('Successfully connected to the database!!', icon='😍')
 
 st.write("Successfully connected to the database!")
