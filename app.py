@@ -431,8 +431,8 @@ def execute_query(connection, cursor,query):
     return result
 
 # df = execute_query(query=query)
-df = execute_query(query=query)
-df_yesterday = execute_query(query=yesterday_query)
+# df = execute_query(query=query)
+# df_yesterday = execute_query(query=yesterday_query)
 df_ads = execute_query(query=ads_data_query)
 
 # Function to generate Facebook Ads Manager URL
@@ -452,33 +452,33 @@ def generate_ad_link(ad_account_id, ad_id):
 if not df_ads.empty and 'ad_account_id' in df_ads.columns and 'ad_id' in df_ads.columns:
     df_ads['ad_link'] = df_ads.apply(lambda row: generate_ad_link(row['ad_account_id'], row['ad_id']), axis=1)
 
-df['Disapproved_Percentage'] = df['disapproved_ads'] / df['total_ads']
-df['Disapproved_Percentage'] = df['Disapproved_Percentage'].fillna(0)
-df['Disapproved_Percentage'] = df['Disapproved_Percentage'].apply(lambda x: "0%" if pd.isna(x) or np.isinf(x) or x == 0 else f"{round(x*100):.0f}%")
+# df['Disapproved_Percentage'] = df['disapproved_ads'] / df['total_ads']
+# df['Disapproved_Percentage'] = df['Disapproved_Percentage'].fillna(0)
+# df['Disapproved_Percentage'] = df['Disapproved_Percentage'].apply(lambda x: "0%" if pd.isna(x) or np.isinf(x) or x == 0 else f"{round(x*100):.0f}%")
 
 
-df['7d_Disapproved_Percentage'] = df['disapproved_ads_last7days'] / df['total_ads_last7days']
-df['7d_Disapproved_Percentage'] = df['7d_Disapproved_Percentage'].fillna(0)
-df['7d_Disapproved_Percentage'] = df['7d_Disapproved_Percentage'].apply(lambda x: "0%" if pd.isna(x) or np.isinf(x) or x == 0 else f"{round(x*100):.0f}%")
+# df['7d_Disapproved_Percentage'] = df['disapproved_ads_last7days'] / df['total_ads_last7days']
+# df['7d_Disapproved_Percentage'] = df['7d_Disapproved_Percentage'].fillna(0)
+# df['7d_Disapproved_Percentage'] = df['7d_Disapproved_Percentage'].apply(lambda x: "0%" if pd.isna(x) or np.isinf(x) or x == 0 else f"{round(x*100):.0f}%")
 
 
-df_yesterday['Disapproved_Percentage'] = df_yesterday['disapproved_ads'] / df_yesterday['total_ads']
-df_yesterday['Disapproved_Percentage'] = df_yesterday['Disapproved_Percentage'].fillna(0)
-df_yesterday['Disapproved_Percentage'] = df_yesterday['Disapproved_Percentage'].apply(lambda x: "0%" if pd.isna(x) or np.isinf(x) or x == 0 else f"{round(x*100):.0f}%")
+# df_yesterday['Disapproved_Percentage'] = df_yesterday['disapproved_ads'] / df_yesterday['total_ads']
+# df_yesterday['Disapproved_Percentage'] = df_yesterday['Disapproved_Percentage'].fillna(0)
+# df_yesterday['Disapproved_Percentage'] = df_yesterday['Disapproved_Percentage'].apply(lambda x: "0%" if pd.isna(x) or np.isinf(x) or x == 0 else f"{round(x*100):.0f}%")
 
-st.title("Disapproved Ads Stats")
-
-
-st.title("Yesterday Disapproved Ads Stats")
+# st.title("Disapproved Ads Stats")
 
 
-st.dataframe(df_yesterday[['buid','business_name','email','ad_account_id','currency','status','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','7d_spends','current_month_spends','30d_spends','lifetime_spends']],use_container_width=True)
+# st.title("Yesterday Disapproved Ads Stats")
+
+
+# st.dataframe(df_yesterday[['buid','business_name','email','ad_account_id','currency','status','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','7d_spends','current_month_spends','30d_spends','lifetime_spends']],use_container_width=True)
 
 
 
-st.title("Overall Disapproved Ads Stats")
+# st.title("Overall Disapproved Ads Stats")
 
-st.dataframe(df[['buid','business_name','email','ad_account_id','currency','status','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','total_ads_last7days','disapproved_ads_last7days','7d_Disapproved_Percentage','total_ads_yesterday','disapproved_ads_yesterday','7d_spends','current_month_spends','30d_spends','lifetime_spends']],use_container_width=True)
+# st.dataframe(df[['buid','business_name','email','ad_account_id','currency','status','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','total_ads_last7days','disapproved_ads_last7days','7d_Disapproved_Percentage','total_ads_yesterday','disapproved_ads_yesterday','7d_spends','current_month_spends','30d_spends','lifetime_spends']],use_container_width=True)
 
 # st.dataframe(df_yesterday,use_container_width=True)
 
