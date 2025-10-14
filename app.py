@@ -87,7 +87,9 @@ case when flag='Others' then 'Active' else COALESCE(flag,'Active') end as status
 sum(case when ad_status = 'APPROVED' then 1 else 0 end) as total_ads,
 sum(case when ad_status = 'DISAPPROVED' then 1 else 0 end) as disapproved_ads,
 sum(case when (ad_status = 'APPROVED' and date(a.created_at)>=current_date-7) then 1 else 0 end) as total_ads_last7days,
-sum(case when (ad_status = 'DISAPPROVED' and date(edited_at)>=current_date-7) then 1 else 0 end) as disapproved_ads_last7days
+sum(case when (ad_status = 'DISAPPROVED' and date(edited_at)>=current_date-7) then 1 else 0 end) as disapproved_ads_last7days,
+sum(case when (ad_status = 'APPROVED' and date(a.created_at)=current_date-1) then 1 else 0 end) as total_ads_yesterday,
+sum(case when (ad_status = 'DISAPPROVED' and date(edited_at)=current_date-1) then 1 else 0 end) as disapproved_ads_yesterday
 from
 (
 SELECT a.ad_account_id,a.ad_id,ad_status,effective_status,edited_at,ad_review_feedback,a.created_at
@@ -233,7 +235,9 @@ case when flag='Others' then 'Active' else COALESCE(flag,'Active') end as status
 sum(case when ad_status = 'APPROVED' then 1 else 0 end) as total_ads,
 sum(case when ad_status = 'DISAPPROVED' then 1 else 0 end) as disapproved_ads,
 sum(case when (ad_status = 'APPROVED' and date(a.created_at)>=current_date-7) then 1 else 0 end) as total_ads_last7days,
-sum(case when (ad_status = 'DISAPPROVED' and date(edited_at)>=current_date-7) then 1 else 0 end) as disapproved_ads_last7days
+sum(case when (ad_status = 'DISAPPROVED' and date(edited_at)>=current_date-7) then 1 else 0 end) as disapproved_ads_last7days,
+sum(case when (ad_status = 'APPROVED' and date(a.created_at)=current_date-1) then 1 else 0 end) as total_ads_yesterday,
+sum(case when (ad_status = 'DISAPPROVED' and date(edited_at)=current_date-1) then 1 else 0 end) as disapproved_ads_yesterday
 from
 (
 SELECT a.ad_account_id,a.ad_id,ad_status,effective_status,edited_at,ad_review_feedback,a.created_at
@@ -371,6 +375,51 @@ order by ad_account_id
 group by 1,2,3,4,5,6,7,8,9,10,11,12
 '''
 
+
+ads_data_query = '''
+
+SELECT a.ad_account_id,a.ad_id,ad_status,effective_status,a.created_at,edited_at,error_type,error_description,ad_review_feedback
+ FROM
+(
+SELECT a.ad_account_id,ad_id,ad_status,effective_status,edited_at,a.created_at,ad_review_feedback,error_description,error_type
+ FROM
+(SELECT 
+  fad.ad_account_id,
+  ad_id,
+  CASE 
+    WHEN effective_status = 'DISAPPROVED' THEN 'DISAPPROVED' 
+    ELSE 'APPROVED' 
+  END AS ad_status,
+  effective_status,
+  DATE(fad.edited_at) AS edited_at,
+  DATE(fad.created_date) AS created_at,
+
+  -- Remove curly braces safely
+  SPLIT_PART(
+    REPLACE(REPLACE(JSON_EXTRACT_PATH_TEXT(ad_review_feedback, 'global'), '{', ''), '}', ''),
+    '=',
+    1
+  ) AS error_type,
+
+  LTRIM(
+    SPLIT_PART(
+      REPLACE(REPLACE(JSON_EXTRACT_PATH_TEXT(ad_review_feedback, 'global'), '{', ''), '}', ''),
+      '=',
+      2
+    )
+  ) AS error_description,
+
+  ROW_NUMBER() OVER (PARTITION BY ad_id ORDER BY DATE(fad.edited_at) DESC) AS rw,
+  ad_review_feedback
+
+FROM zocket_global.fb_ads_details_v3 fad
+JOIN zocket_global.fb_child_ad_accounts fcaa 
+  ON fad.ad_account_id = fcaa.ad_account_id
+)a
+where rw=1
+) a
+'''
+
 @st.cache_data(ttl=36400)  # 86400 seconds = 24 hours
 @redshift_connection(db,name,passw,server,port)
 def execute_query(connection, cursor,query):
@@ -384,6 +433,7 @@ def execute_query(connection, cursor,query):
 # df = execute_query(query=query)
 df = execute_query(query=query)
 df_yesterday = execute_query(query=yesterday_query)
+df_ads = execute_query(query=ads_data_query)
 
 df['Disapproved_Percentage'] = df['disapproved_ads'] / df['total_ads']
 df['Disapproved_Percentage'] = df['Disapproved_Percentage'].fillna(0)
@@ -411,6 +461,343 @@ st.dataframe(df_yesterday[['buid','business_name','email','ad_account_id','curre
 
 st.title("Overall Disapproved Ads Stats")
 
-st.dataframe(df[['buid','business_name','email','ad_account_id','currency','status','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','total_ads_last7days','disapproved_ads_last7days','7d_Disapproved_Percentage','7d_spends','current_month_spends','30d_spends','lifetime_spends']],use_container_width=True)
+st.dataframe(df[['buid','business_name','email','ad_account_id','currency','status','disable_date','disable_reason','total_ads','disapproved_ads','Disapproved_Percentage','total_ads_last7days','disapproved_ads_last7days','7d_Disapproved_Percentage','total_ads_yesterday','disapproved_ads_yesterday','7d_spends','current_month_spends','30d_spends','lifetime_spends']],use_container_width=True)
 
 # st.dataframe(df_yesterday,use_container_width=True)
+
+st.title("Ads Data")
+
+# Create filter widgets for the ads data
+st.subheader("Ads Data Filters")
+
+# Arrange filters in 2 columns
+col1, col2 = st.columns(2)
+
+with col1:
+    # Ad Account Filter
+    ad_account_id = st.text_input("Enter Ad Account ID", placeholder="e.g., act_123456789")
+    
+    # Date Filter (for 'created_at' ideally, as that's usually present)
+    date_min = df_ads['created_at'].min() if 'created_at' in df_ads.columns else None
+    date_max = df_ads['created_at'].max() if 'created_at' in df_ads.columns else None
+    if date_min is not None and date_max is not None:
+        date_range = st.date_input(
+            "Created At Date Range",
+            value=(date_min, date_max),
+            min_value=date_min,
+            max_value=date_max
+        )
+    else:
+        date_range = None
+    
+    # Main Status Filter (formerly Ad Status)
+    ad_status_options = df_ads['ad_status'].dropna().unique() if 'ad_status' in df_ads.columns else []
+    selected_ad_status = st.multiselect("Main Status", options=ad_status_options)
+
+with col2:
+    # Edited At Filter
+    edited_min = df_ads['edited_at'].min() if 'edited_at' in df_ads.columns else None
+    edited_max = df_ads['edited_at'].max() if 'edited_at' in df_ads.columns else None
+    if edited_min is not None and edited_max is not None:
+        edited_range = st.date_input(
+            "Edited At Date Range",
+            value=(edited_min, edited_max),
+            min_value=edited_min,
+            max_value=edited_max,
+            key="edited_at_range"
+        )
+    else:
+        edited_range = None
+    
+    # Sub Status Filter (formerly Effective Status)
+    effective_status_options = df_ads['effective_status'].dropna().unique() if 'effective_status' in df_ads.columns else []
+    selected_effective_status = st.multiselect("Sub Status", options=effective_status_options)
+    
+    # Error Type Filter
+    error_type_options = df_ads['error_type'].dropna().unique() if 'error_type' in df_ads.columns else []
+    selected_error_type = st.multiselect("Error Type", options=error_type_options)
+
+# Apply filters
+filtered_df_ads = df_ads.copy()
+
+# Ad Account ID validation and filtering
+if ad_account_id and 'ad_account_id' in df_ads.columns:
+    # Check if the entered ad account ID exists in the data
+    available_accounts = df_ads['ad_account_id'].dropna().unique()
+    if ad_account_id not in available_accounts:
+        st.error(f"Ad Account ID '{ad_account_id}' does not exist. Please check the account ID and try again.")
+        st.info(f"Available account IDs: {', '.join(available_accounts[:10])}{'...' if len(available_accounts) > 10 else ''}")
+        filtered_df_ads = pd.DataFrame()  # Empty dataframe to show no results
+    else:
+        filtered_df_ads = filtered_df_ads[filtered_df_ads['ad_account_id'] == ad_account_id]
+
+if date_range and 'created_at' in df_ads.columns and not filtered_df_ads.empty:
+    start, end = date_range
+    filtered_df_ads = filtered_df_ads[
+        (filtered_df_ads['created_at'] >= start) &
+        (filtered_df_ads['created_at'] <= end)
+    ]
+
+if edited_range and 'edited_at' in df_ads.columns and not filtered_df_ads.empty:
+    start, end = edited_range
+    filtered_df_ads = filtered_df_ads[
+        (filtered_df_ads['edited_at'] >= start) &
+        (filtered_df_ads['edited_at'] <= end)
+    ]
+
+if selected_ad_status and 'ad_status' in df_ads.columns and not filtered_df_ads.empty:
+    filtered_df_ads = filtered_df_ads[filtered_df_ads['ad_status'].isin(selected_ad_status)]
+
+if selected_effective_status and 'effective_status' in df_ads.columns and not filtered_df_ads.empty:
+    filtered_df_ads = filtered_df_ads[filtered_df_ads['effective_status'].isin(selected_effective_status)]
+
+if selected_error_type and 'error_type' in df_ads.columns and not filtered_df_ads.empty:
+    filtered_df_ads = filtered_df_ads[filtered_df_ads['error_type'].isin(selected_error_type)]
+
+# Overview Section (Independent of filters)
+st.subheader("📊 Overview")
+
+if not df_ads.empty:
+    # Calculate date ranges
+    today = pd.Timestamp.now().date()
+    yesterday = today - pd.Timedelta(days=1)
+    thirty_days_ago = today - pd.Timedelta(days=30)
+    current_month_start = pd.Timestamp.now().replace(day=1).date()
+    
+    # Convert date columns to datetime for comparison
+    df_ads_copy = df_ads.copy()
+    if 'created_at' in df_ads_copy.columns:
+        df_ads_copy['created_at'] = pd.to_datetime(df_ads_copy['created_at'])
+    if 'edited_at' in df_ads_copy.columns:
+        df_ads_copy['edited_at'] = pd.to_datetime(df_ads_copy['edited_at'])
+    
+    # Calculate metrics
+    total_ads = len(df_ads)
+    total_rejected = len(df_ads[df_ads['ad_status'] == 'DISAPPROVED'])
+    
+    # Yesterday metrics
+    yesterday_ads = len(df_ads_copy[
+        (df_ads_copy['created_at'].dt.date == yesterday) |
+        (df_ads_copy['edited_at'].dt.date == yesterday)
+    ])
+    yesterday_rejected = len(df_ads_copy[
+        (df_ads_copy['ad_status'] == 'DISAPPROVED') &
+        ((df_ads_copy['created_at'].dt.date == yesterday) |
+         (df_ads_copy['edited_at'].dt.date == yesterday))
+    ])
+    
+    # Current month metrics
+    current_month_ads = len(df_ads_copy[
+        df_ads_copy['created_at'].dt.date >= current_month_start
+    ])
+    current_month_rejected = len(df_ads_copy[
+        (df_ads_copy['ad_status'] == 'DISAPPROVED') &
+        (df_ads_copy['created_at'].dt.date >= current_month_start)
+    ])
+    
+    # Last 30 days metrics
+    last_30_days_ads = len(df_ads_copy[
+        df_ads_copy['created_at'].dt.date >= thirty_days_ago
+    ])
+    last_30_days_rejected = len(df_ads_copy[
+        (df_ads_copy['ad_status'] == 'DISAPPROVED') &
+        (df_ads_copy['created_at'].dt.date >= thirty_days_ago)
+    ])
+    
+    # Top rejected account yesterday
+    yesterday_rejected_by_account = df_ads_copy[
+        (df_ads_copy['ad_status'] == 'DISAPPROVED') &
+        ((df_ads_copy['created_at'].dt.date == yesterday) |
+         (df_ads_copy['edited_at'].dt.date == yesterday))
+    ].groupby('ad_account_id').size().sort_values(ascending=False)
+    
+    top_rejected_account_yesterday = yesterday_rejected_by_account.index[0] if len(yesterday_rejected_by_account) > 0 else "None"
+    top_rejected_count_yesterday = yesterday_rejected_by_account.iloc[0] if len(yesterday_rejected_by_account) > 0 else 0
+    
+    # Display metrics in columns
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Ads", total_ads)
+        st.metric("Total Rejected", total_rejected)
+    
+    with col2:
+        st.metric("Yesterday Ads", yesterday_ads)
+        st.metric("Yesterday Rejected", yesterday_rejected)
+    
+    with col3:
+        st.metric("Current Month Ads", current_month_ads)
+        st.metric("Current Month Rejected", current_month_rejected)
+    
+    with col4:
+        st.metric("Last 30 Days Ads", last_30_days_ads)
+        st.metric("Last 30 Days Rejected", last_30_days_rejected)
+    
+    # Top rejected account info
+    st.info(f"🔴 **Top Rejected Account Yesterday:** {top_rejected_account_yesterday} ({top_rejected_count_yesterday} rejections)")
+    
+else:
+    st.warning("No data available to display overview.")
+
+# Filtered Overview Section (shows stats for filtered data)
+# Check if any filters are applied
+filters_applied = (
+    ad_account_id or 
+    date_range or 
+    edited_range or 
+    selected_ad_status or 
+    selected_effective_status or 
+    selected_error_type
+)
+
+if filters_applied and not filtered_df_ads.empty:
+    st.subheader("🔍 Filtered Overview")
+    
+    # Calculate date ranges
+    today = pd.Timestamp.now().date()
+    yesterday = today - pd.Timedelta(days=1)
+    thirty_days_ago = today - pd.Timedelta(days=30)
+    current_month_start = pd.Timestamp.now().replace(day=1).date()
+    
+    # Convert date columns to datetime for comparison
+    filtered_df_ads_copy = filtered_df_ads.copy()
+    if 'created_at' in filtered_df_ads_copy.columns:
+        filtered_df_ads_copy['created_at'] = pd.to_datetime(filtered_df_ads_copy['created_at'])
+    if 'edited_at' in filtered_df_ads_copy.columns:
+        filtered_df_ads_copy['edited_at'] = pd.to_datetime(filtered_df_ads_copy['edited_at'])
+    
+    # Calculate filtered metrics
+    filtered_total_ads = len(filtered_df_ads)
+    filtered_total_rejected = len(filtered_df_ads[filtered_df_ads['ad_status'] == 'DISAPPROVED'])
+    
+    # Yesterday metrics for filtered data
+    filtered_yesterday_ads = len(filtered_df_ads_copy[
+        (filtered_df_ads_copy['created_at'].dt.date == yesterday) |
+        (filtered_df_ads_copy['edited_at'].dt.date == yesterday)
+    ])
+    filtered_yesterday_rejected = len(filtered_df_ads_copy[
+        (filtered_df_ads_copy['ad_status'] == 'DISAPPROVED') &
+        ((filtered_df_ads_copy['created_at'].dt.date == yesterday) |
+         (filtered_df_ads_copy['edited_at'].dt.date == yesterday))
+    ])
+    
+    # Current month metrics for filtered data
+    filtered_current_month_ads = len(filtered_df_ads_copy[
+        filtered_df_ads_copy['created_at'].dt.date >= current_month_start
+    ])
+    filtered_current_month_rejected = len(filtered_df_ads_copy[
+        (filtered_df_ads_copy['ad_status'] == 'DISAPPROVED') &
+        (filtered_df_ads_copy['created_at'].dt.date >= current_month_start)
+    ])
+    
+    # Last 30 days metrics for filtered data
+    filtered_last_30_days_ads = len(filtered_df_ads_copy[
+        filtered_df_ads_copy['created_at'].dt.date >= thirty_days_ago
+    ])
+    filtered_last_30_days_rejected = len(filtered_df_ads_copy[
+        (filtered_df_ads_copy['ad_status'] == 'DISAPPROVED') &
+        (filtered_df_ads_copy['created_at'].dt.date >= thirty_days_ago)
+    ])
+    
+    # Top rejected account yesterday for filtered data
+    filtered_yesterday_rejected_by_account = filtered_df_ads_copy[
+        (filtered_df_ads_copy['ad_status'] == 'DISAPPROVED') &
+        ((filtered_df_ads_copy['created_at'].dt.date == yesterday) |
+         (filtered_df_ads_copy['edited_at'].dt.date == yesterday))
+    ].groupby('ad_account_id').size().sort_values(ascending=False)
+    
+    filtered_top_rejected_account_yesterday = filtered_yesterday_rejected_by_account.index[0] if len(filtered_yesterday_rejected_by_account) > 0 else "None"
+    filtered_top_rejected_count_yesterday = filtered_yesterday_rejected_by_account.iloc[0] if len(filtered_yesterday_rejected_by_account) > 0 else 0
+    
+    # Display filtered metrics in columns
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Filtered Total Ads", filtered_total_ads)
+        st.metric("Filtered Total Rejected", filtered_total_rejected)
+    
+    with col2:
+        st.metric("Filtered Yesterday Ads", filtered_yesterday_ads)
+        st.metric("Filtered Yesterday Rejected", filtered_yesterday_rejected)
+    
+    with col3:
+        st.metric("Filtered Current Month Ads", filtered_current_month_ads)
+        st.metric("Filtered Current Month Rejected", filtered_current_month_rejected)
+    
+    with col4:
+        st.metric("Filtered Last 30 Days Ads", filtered_last_30_days_ads)
+        st.metric("Filtered Last 30 Days Rejected", filtered_last_30_days_rejected)
+    
+    # Top rejected account info for filtered data
+    st.info(f"🔴 **Top Rejected Account Yesterday (Filtered):** {filtered_top_rejected_account_yesterday} ({filtered_top_rejected_count_yesterday} rejections)")
+    
+    # Show percentage of filtered data vs total data
+    if not df_ads.empty:
+        total_ads_count = len(df_ads)
+        filtered_percentage = (filtered_total_ads / total_ads_count) * 100 if total_ads_count > 0 else 0
+        st.success(f"📊 **Filtered data represents {filtered_percentage:.1f}% of total ads**")
+
+# Sort by created_at descending before displaying, if column exists
+if 'created_at' in filtered_df_ads.columns:
+    st.dataframe(filtered_df_ads.sort_values('created_at', ascending=False), use_container_width=True)
+else:
+    st.dataframe(filtered_df_ads, use_container_width=True)
+
+
+# Arrange tables side by side using Streamlit columns
+col1, col2 = st.columns(2)
+
+with col1:
+    # Grouped data by created_at of disapproved ads, sorted by created_at desc
+    grouped_created_at = (
+        filtered_df_ads[filtered_df_ads['ad_status'] == 'DISAPPROVED']
+        .groupby(['created_at'])
+        .agg(no_of_ads=('ad_id', 'count'))
+        .sort_index(ascending=False)
+    )
+    st.write("Disapproved Ads Count by Created Date")
+    st.dataframe(grouped_created_at, use_container_width=True)
+
+with col2:
+    # Grouped data by created_at and error_type of disapproved ads, sorted by created_at desc
+    grouped_created_at_error = (
+        filtered_df_ads[filtered_df_ads['ad_status'] == 'DISAPPROVED']
+        .groupby(['created_at', 'error_type'])
+        .agg(no_of_ads=('ad_id', 'count'))
+        .sort_index(level='created_at', ascending=False)
+    )
+    st.write("Disapproved Ads Count by Created Date and Error Type")
+    st.dataframe(grouped_created_at_error, use_container_width=True)
+
+# Arrange grouped tables by ad_account_id and (ad_account_id, error_type) side by side
+col3, col4 = st.columns(2)
+
+with col3:
+    # Grouped data by ad_account_id of disapproved ads
+    grouped_df_ads_account = (
+        filtered_df_ads[filtered_df_ads['ad_status'] == 'DISAPPROVED']
+        .groupby(['ad_account_id'])
+        .agg(no_of_ads=('ad_id', 'count'))
+    )
+    st.write("Disapproved Ads Count by Ad Account ID")
+    st.dataframe(grouped_df_ads_account, use_container_width=True)
+
+with col4:
+    # Grouped data by ad_account_id and error_type of disapproved ads
+    grouped_df_ads_account_error = (
+        filtered_df_ads[filtered_df_ads['ad_status'] == 'DISAPPROVED']
+        .groupby(['ad_account_id', 'error_type'])
+        .agg(no_of_ads=('ad_id', 'count'))
+    )
+    st.write("Disapproved Ads Count by Ad Account ID and Error Type")
+    st.dataframe(grouped_df_ads_account_error, use_container_width=True)
+
+# Grouped data by ad_account_id , created_at, error_type of disapproved ads
+grouped_df_ads_account_created_at_error = (
+    filtered_df_ads[filtered_df_ads['ad_status'] == 'DISAPPROVED']
+    .groupby(['ad_account_id', 'created_at', 'error_type'])
+    .agg(no_of_ads=('ad_id', 'count'))
+    .sort_index(level='created_at', ascending=False)
+)
+st.write("Disapproved Ads Count by Ad Account ID, Created Date and Error Type")
+st.dataframe(grouped_df_ads_account_created_at_error, use_container_width=True)
