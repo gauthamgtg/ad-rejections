@@ -378,7 +378,7 @@ group by 1,2,3,4,5,6,7,8,9,10,11,12
 
 ads_data_query = '''
 
-SELECT a.ad_account_id,a.ad_id,ad_status,effective_status,a.created_at,edited_at as status_change_date,error_type,error_description,ad_review_feedback
+SELECT a.ad_account_id,a.ad_id,ad_status,effective_status,a.created_at,edited_at as status_change_date,error_type,error_description
  FROM
 (
 SELECT a.ad_account_id,ad_id,ad_status,effective_status,edited_at,a.created_at,ad_review_feedback,error_description,error_type
@@ -434,6 +434,23 @@ def execute_query(connection, cursor,query):
 df = execute_query(query=query)
 df_yesterday = execute_query(query=yesterday_query)
 df_ads = execute_query(query=ads_data_query)
+
+# Function to generate Facebook Ads Manager URL
+def generate_ad_link(ad_account_id, ad_id):
+    """
+    Generate Facebook Ads Manager URL for a specific ad.
+    Removes 'act_' prefix from ad_account_id and uses the ad_id directly.
+    """
+    # Remove 'act_' prefix if it exists
+    clean_account_id = ad_account_id.replace('act_', '') if ad_account_id.startswith('act_') else ad_account_id
+    
+    # Generate the URL
+    url = f"https://adsmanager.facebook.com/adsmanager/manage/ads/edit/standalone?act={clean_account_id}&columns=name%2Cdelivery%2Crecommendations_guidance%2Ccampaign_name%2Cbid%2Cbudget%2Clast_significant_edit%2Cattribution_setting%2Cresults%2Creach%2Cimpressions%2Ccost_per_result%2Cquality_score_organic%2Cquality_score_ectr%2Cquality_score_ecvr%2Cspend%2Cend_time%2Cschedule%2Ccpm%2Cpurchase_roas%3Aomni_purchase%2Cfrequency%2Cactions%3Aomni_purchase%2Ccreated_time&attribution_windows=default&filter_set=CAMPAIGN_DELIVERY_STATUS-STRING_SET%1EIN%1E[%22active%22%2C%22draft%22%2C%22pending%22%2C%22inactive%22%2C%22error%22%2C%22deleted%22%2C%22completed%22%2C%22off%22]%1DCAMPAIGN_GROUP_DELIVERY_STATUS-STRING_SET%1EIN%1E[%22active%22%2C%22draft%22%2C%22pending%22%2C%22inactive%22%2C%22error%22%2C%22deleted%22%2C%22completed%22%2C%22off%22]%1DADGROUP_DELIVERY_STATUS-STRING_SET%1EIN%1E[%22active%22%2C%22draft%22%2C%22pending%22%2C%22inactive%22%2C%22error%22%2C%22deleted%22%2C%22completed%22%2C%22off%22]&selected_ad_ids={ad_id}&sort=created_time~0&current_step=0&ads_manager_write_regions=true&nav_source=no_referrer#"
+    return url
+
+# Add ad_link column to df_ads
+if not df_ads.empty and 'ad_account_id' in df_ads.columns and 'ad_id' in df_ads.columns:
+    df_ads['ad_link'] = df_ads.apply(lambda row: generate_ad_link(row['ad_account_id'], row['ad_id']), axis=1)
 
 df['Disapproved_Percentage'] = df['disapproved_ads'] / df['total_ads']
 df['Disapproved_Percentage'] = df['Disapproved_Percentage'].fillna(0)
@@ -733,9 +750,33 @@ if filters_applied and not filtered_df_ads.empty:
 
 # Sort by status_change_date descending before displaying, if column exists
 if 'created_at' in filtered_df_ads.columns:
-    st.dataframe(filtered_df_ads.sort_values('created_at', ascending=False), use_container_width=True)
+    # Configure column to display ad_link as clickable links
+    column_config = {
+        "ad_link": st.column_config.LinkColumn(
+            "Ad_Link",
+            help="Click to open in Facebook Ads Manager",
+            display_text="Ad_Link"
+        )
+    }
+    st.dataframe(
+        filtered_df_ads.sort_values('created_at', ascending=False), 
+        use_container_width=True,
+        column_config=column_config
+    )
 else:
-    st.dataframe(filtered_df_ads, use_container_width=True)
+    # Configure column to display ad_link as clickable links
+    column_config = {
+        "ad_link": st.column_config.LinkColumn(
+            "Ad_Link",
+            help="Click to open in Facebook Ads Manager",
+            display_text="Ad_Link"
+        )
+    }
+    st.dataframe(
+        filtered_df_ads, 
+        use_container_width=True,
+        column_config=column_config
+    )
 
 
 # Arrange tables side by side using Streamlit columns
