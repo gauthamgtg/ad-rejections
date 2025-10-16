@@ -815,15 +815,33 @@ if page == "Main Stats":
         st.write("Disapproved Ads Count by Ad Account ID and Error Type")
         st.dataframe(grouped_df_ads_account_error, use_container_width=True)
 
-    # Grouped data by ad_account_id , status_change_date, error_type of disapproved ads
+    # Show two tables side by side:
+    # 1. Left: By ad_account_id and status_change_date (total disapproved ads per account per date)
+    # 2. Right: By ad_account_id, status_change_date, and error_type (total disapproved ads per account, date, and error type)
+
+    grouped_df_ads_account_created_at = (
+        filtered_df_ads[filtered_df_ads['ad_status'] == 'DISAPPROVED']
+        .groupby(['ad_account_id', 'status_change_date'])
+        .agg(no_of_ads=('ad_id', 'count'))
+        .sort_index(level='status_change_date', ascending=False)
+    )
+
     grouped_df_ads_account_created_at_error = (
         filtered_df_ads[filtered_df_ads['ad_status'] == 'DISAPPROVED']
         .groupby(['ad_account_id', 'status_change_date', 'error_type'])
         .agg(no_of_ads=('ad_id', 'count'))
         .sort_index(level='status_change_date', ascending=False)
     )
-    st.write("Disapproved Ads Count by Ad Account ID, Status Change Date and Error Type")
-    st.dataframe(grouped_df_ads_account_created_at_error, use_container_width=True)
+
+    col5, col6 = st.columns(2)
+
+    with col5:
+        st.write("Disapproved Ads Count by Ad Account ID and Status Change Date")
+        st.dataframe(grouped_df_ads_account_created_at, use_container_width=True)
+
+    with col6:
+        st.write("Disapproved Ads Count by Ad Account ID, Status Change Date and Error Type")
+        st.dataframe(grouped_df_ads_account_created_at_error, use_container_width=True)
 
 # Raw Dump Section
 elif page == "Raw Dump":
