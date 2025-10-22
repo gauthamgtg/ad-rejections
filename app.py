@@ -1040,7 +1040,7 @@ with tab2:
         # Pagination controls
         st.subheader("📄 Pagination")
         total_rows = len(filtered_df_ads)
-        page_size = 100000
+        page_size = 10000
         
         # Calculate pagination
         total_pages = max(1, (total_rows + page_size - 1) // page_size)
@@ -1113,11 +1113,11 @@ with tab3:
         st.title("📈 Ad Publishing & Rejection Summary")
         
         if not df_ads.empty:
-            # Calculate date ranges
-            today = pd.Timestamp.now().date()
-            yesterday = today - pd.Timedelta(days=1)
-            thirty_days_ago = today - pd.Timedelta(days=30)
-            current_month_start = pd.Timestamp.now().replace(day=1).date()
+            # Initialize session state for summary data if not exists
+            if 'summary_df' not in st.session_state:
+                st.session_state.summary_df = None
+                st.session_state.summary_title = None
+                st.session_state.filters_applied = None
             
             # Check if any filters are applied
             filters_applied = (
@@ -1129,86 +1129,105 @@ with tab3:
                 (edited_range and edited_range != (edited_min, edited_max))
             )
             
-            # Use filtered data if filters are applied, otherwise use unfiltered data
-            if filters_applied and not filtered_df_ads.empty:
-                df_summary = filtered_df_ads.copy()
-                summary_title = "Filtered Summary"
-            else:
-                df_summary = df_ads.copy()
-                summary_title = "Complete Summary"
-            if 'created_at' in df_summary.columns:
-                df_summary['created_at'] = pd.to_datetime(df_summary['created_at'])
-            if 'status_change_date' in df_summary.columns:
-                df_summary['status_change_date'] = pd.to_datetime(df_summary['status_change_date'])
+            # Check if we need to regenerate summary data
+            need_regeneration = (
+                st.session_state.summary_df is None or 
+                st.session_state.filters_applied != filters_applied
+            )
             
-            # Get unique ad accounts with their BUIDs
-            unique_accounts = df_summary[['ad_account_id', 'buid']].drop_duplicates().dropna()
-            
-            # Create summary data for each account
-            summary_data = []
-            
-            for _, row in unique_accounts.iterrows():
-                account = row['ad_account_id']
-                buid = row['buid']
-                account_data = df_summary[df_summary['ad_account_id'] == account]
-                
-                # Calculate metrics for this account
-                # Lifetime: All ads regardless of date (consistent with Filtered Overview)
-                lifetime_published = len(account_data)  # All ads (both APPROVED and DISAPPROVED)
-                lifetime_rejected = len(account_data[account_data['ad_status'] == 'DISAPPROVED'])
-                
-                # Yesterday: Ads created/rejected on yesterday (consistent with Filtered Overview)
-                yesterday_published = len(account_data[
-                    (account_data['created_at'].dt.date == yesterday)
-                ])
-                yesterday_rejected = len(account_data[
-                    (account_data['ad_status'] == 'DISAPPROVED') &
-                    (account_data['status_change_date'].dt.date == yesterday)
-                ])
-                
-                # Current month: Ads created/rejected from start of current month
-                current_month_published = len(account_data[
-                    (account_data['created_at'].dt.date >= current_month_start)
-                ])
-                current_month_rejected = len(account_data[
-                    (account_data['ad_status'] == 'DISAPPROVED') &
-                    (account_data['status_change_date'].dt.date >= current_month_start)
-                ])
-                
-                # Last month: Ads created/rejected in the previous month
-                last_month_published = len(account_data[
-                    (account_data['created_at'].dt.date >= thirty_days_ago) &
-                    (account_data['created_at'].dt.date < current_month_start)
-                ])
-                last_month_rejected = len(account_data[
-                    (account_data['ad_status'] == 'DISAPPROVED') &
-                    (account_data['status_change_date'].dt.date >= thirty_days_ago) &
-                    (account_data['status_change_date'].dt.date < current_month_start)
-                ])
-                
-                summary_data.append({
-                    'BUID': buid,
-                    'Ad Account ID': account,
-                    'Ads Published - Lifetime': lifetime_published,
-                    'Ads Rejected - Lifetime': lifetime_rejected,
-                    'Ads Published - Last Month': last_month_published,
-                    'Ads Rejected - Last Month': last_month_rejected,
-                    'Ads Published - Current Month': current_month_published,
-                    'Ads Rejected - Current Month': current_month_rejected,
-                    'Ads Published - Yesterday': yesterday_published,
-                    'Ads Rejected - Yesterday': yesterday_rejected
-                })
-            
-            summary_df = pd.DataFrame(summary_data)
+            if need_regeneration:
+                # Show loading indicator
+                with st.spinner("Loading summary data..."):
+                    # Calculate date ranges
+                    today = pd.Timestamp.now().date()
+                    yesterday = today - pd.Timedelta(days=1)
+                    thirty_days_ago = today - pd.Timedelta(days=30)
+                    current_month_start = pd.Timestamp.now().replace(day=1).date()
+                    
+                    # Use filtered data if filters are applied, otherwise use unfiltered data
+                    if filters_applied and not filtered_df_ads.empty:
+                        df_summary = filtered_df_ads.copy()
+                        summary_title = "Filtered Summary"
+                    else:
+                        df_summary = df_ads.copy()
+                        summary_title = "Complete Summary"
+                    
+                    if 'created_at' in df_summary.columns:
+                        df_summary['created_at'] = pd.to_datetime(df_summary['created_at'])
+                    if 'status_change_date' in df_summary.columns:
+                        df_summary['status_change_date'] = pd.to_datetime(df_summary['status_change_date'])
+                    
+                    # Get unique ad accounts with their BUIDs
+                    unique_accounts = df_summary[['ad_account_id', 'buid']].drop_duplicates().dropna()
+                    
+                    # Create summary data for each account
+                    summary_data = []
+                    
+                    for _, row in unique_accounts.iterrows():
+                        account = row['ad_account_id']
+                        buid = row['buid']
+                        account_data = df_summary[df_summary['ad_account_id'] == account]
+                        
+                        # Calculate metrics for this account
+                        # Lifetime: All ads regardless of date (consistent with Filtered Overview)
+                        lifetime_published = len(account_data)  # All ads (both APPROVED and DISAPPROVED)
+                        lifetime_rejected = len(account_data[account_data['ad_status'] == 'DISAPPROVED'])
+                        
+                        # Yesterday: Ads created/rejected on yesterday (consistent with Filtered Overview)
+                        yesterday_published = len(account_data[
+                            (account_data['created_at'].dt.date == yesterday)
+                        ])
+                        yesterday_rejected = len(account_data[
+                            (account_data['ad_status'] == 'DISAPPROVED') &
+                            (account_data['status_change_date'].dt.date == yesterday)
+                        ])
+                        
+                        # Current month: Ads created/rejected from start of current month
+                        current_month_published = len(account_data[
+                            (account_data['created_at'].dt.date >= current_month_start)
+                        ])
+                        current_month_rejected = len(account_data[
+                            (account_data['ad_status'] == 'DISAPPROVED') &
+                            (account_data['status_change_date'].dt.date >= current_month_start)
+                        ])
+                        
+                        # Last month: Ads created/rejected in the previous month
+                        last_month_published = len(account_data[
+                            (account_data['created_at'].dt.date >= thirty_days_ago) &
+                            (account_data['created_at'].dt.date < current_month_start)
+                        ])
+                        last_month_rejected = len(account_data[
+                            (account_data['ad_status'] == 'DISAPPROVED') &
+                            (account_data['status_change_date'].dt.date >= thirty_days_ago) &
+                            (account_data['status_change_date'].dt.date < current_month_start)
+                        ])
+                        
+                        summary_data.append({
+                            'BUID': buid,
+                            'Ad Account ID': account,
+                            'Ads Published - Lifetime': lifetime_published,
+                            'Ads Rejected - Lifetime': lifetime_rejected,
+                            'Ads Published - Last Month': last_month_published,
+                            'Ads Rejected - Last Month': last_month_rejected,
+                            'Ads Published - Current Month': current_month_published,
+                            'Ads Rejected - Current Month': current_month_rejected,
+                            'Ads Published - Yesterday': yesterday_published,
+                            'Ads Rejected - Yesterday': yesterday_rejected
+                        })
+                    
+                    # Store in session state
+                    st.session_state.summary_df = pd.DataFrame(summary_data)
+                    st.session_state.summary_title = summary_title
+                    st.session_state.filters_applied = filters_applied
             
             # Display the summary table
-            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+            st.dataframe(st.session_state.summary_df, use_container_width=True, hide_index=True)
             
             # Add some additional context
-            if filters_applied:
-                st.info(f"📈 **{summary_title}:** This table shows ad publishing and rejection metrics across different timeframes for filtered accounts.")
+            if st.session_state.filters_applied:
+                st.info(f"📈 **{st.session_state.summary_title}:** This table shows ad publishing and rejection metrics across different timeframes for filtered accounts.")
             else:
-                st.info(f"📈 **{summary_title}:** This table shows ad publishing and rejection metrics across different timeframes for all accounts in your dataset.")
+                st.info(f"📈 **{st.session_state.summary_title}:** This table shows ad publishing and rejection metrics across different timeframes for all accounts in your dataset.")
             
         else:
             st.warning("No data available to generate summary table.")
