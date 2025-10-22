@@ -57,7 +57,7 @@ st.set_page_config( page_title = "Ads Dashboard",
 
 # Configure Streamlit to handle larger datasets and improve WebSocket stability
 # This increases the message size limit to handle large dataframes
-st.config.set_option('server.maxMessageSize', 500)
+st.config.set_option('server.maxMessageSize', 1000)
 
 # Additional WebSocket stability configurations
 st.config.set_option('server.enableWebsocketCompression', True)
@@ -1006,8 +1006,70 @@ with tab2:
     try:
         st.title("📋 Raw Dump")
         
+        # Add download options
+        st.subheader("📥 Download Data")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # CSV Download
+            csv_data = filtered_df_ads.to_csv(index=False)
+            st.download_button(
+                label="📄 Download CSV",
+                data=csv_data,
+                file_name=f"ads_data_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                help="Download the filtered data as CSV file"
+            )
+        
+        with col2:
+            # Excel Download
+            import io
+            excel_buffer = io.BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                filtered_df_ads.to_excel(writer, index=False, sheet_name='Ads Data')
+            excel_data = excel_buffer.getvalue()
+            
+            st.download_button(
+                label="📊 Download Excel",
+                data=excel_data,
+                file_name=f"ads_data_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Download the filtered data as Excel file"
+            )
+        
+        # Pagination controls
+        st.subheader("📄 Pagination")
+        total_rows = len(filtered_df_ads)
+        page_size = 10000
+        
+        # Calculate pagination
+        total_pages = max(1, (total_rows + page_size - 1) // page_size)
+        
+        # Page selection
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col1:
+            st.metric("Total Records", f"{total_rows:,}")
+        with col2:
+            page = st.selectbox(
+                "Select Page",
+                options=list(range(1, total_pages + 1)),
+                index=0,
+                help=f"Page 1 of {total_pages}"
+            )
+        with col3:
+            st.metric("Records per Page", f"{page_size:,}")
+        
+        # Calculate start and end indices
+        start_idx = (page - 1) * page_size
+        end_idx = min(start_idx + page_size, total_rows)
+        
+        # Get the page data
+        page_data = filtered_df_ads.iloc[start_idx:end_idx]
+        
+        st.info(f"📋 **Showing records {start_idx + 1:,} to {end_idx:,} of {total_rows:,}**")
+        
         # Sort by status_change_date descending before displaying, if column exists
-        if 'created_at' in filtered_df_ads.columns:
+        if 'created_at' in page_data.columns:
             # Configure column to display ad_link as clickable links
             column_config = {
                 "ad_link": st.column_config.LinkColumn(
@@ -1017,9 +1079,10 @@ with tab2:
                 )
             }
             st.dataframe(
-                filtered_df_ads.sort_values('created_at', ascending=False), 
+                page_data.sort_values('created_at', ascending=False), 
                 use_container_width=True,
-                column_config=column_config
+                column_config=column_config,
+                hide_index=True
             )
         else:
             # Configure column to display ad_link as clickable links
@@ -1031,10 +1094,15 @@ with tab2:
                 )
             }
             st.dataframe(
-                filtered_df_ads, 
+                page_data, 
                 use_container_width=True,
-                column_config=column_config
+                column_config=column_config,
+                hide_index=True
             )
+        
+        # Navigation info
+        if total_pages > 1:
+            st.info(f"📄 **Page {page} of {total_pages}** - Use the dropdown above to navigate between pages")
     except Exception as e:
         st.error(f"Error in Raw Dump section: {str(e)}")
         st.info("Please try refreshing the page or contact support if the issue persists.")
