@@ -1040,7 +1040,7 @@ with tab2:
         # Pagination controls
         st.subheader("📄 Pagination")
         total_rows = len(filtered_df_ads)
-        page_size = 10000
+        page_size = 100000
         
         # Calculate pagination
         total_pages = max(1, (total_rows + page_size - 1) // page_size)
