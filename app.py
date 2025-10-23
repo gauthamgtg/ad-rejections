@@ -1006,6 +1006,10 @@ with tab2:
     try:
         st.title("📋 Raw Dump")
         
+        # Show data summary
+        total_rows = len(filtered_df_ads)
+        st.info(f"📊 **Total Records Available:** {total_rows:,}")
+        
         # Add download options
         st.subheader("📥 Download Data")
         col1, col2 = st.columns(2)
@@ -1037,72 +1041,8 @@ with tab2:
                 help="Download the filtered data as Excel file"
             )
         
-        # Pagination controls
-        st.subheader("📄 Pagination")
-        total_rows = len(filtered_df_ads)
-        page_size = 10000
+        st.success("✅ **Performance Optimized:** Table display has been removed to improve loading speed. Use the download buttons above to access the complete dataset.")
         
-        # Calculate pagination
-        total_pages = max(1, (total_rows + page_size - 1) // page_size)
-        
-        # Page selection
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col1:
-            st.metric("Total Records", f"{total_rows:,}")
-        with col2:
-            page = st.selectbox(
-                "Select Page",
-                options=list(range(1, total_pages + 1)),
-                index=0,
-                help=f"Page 1 of {total_pages}"
-            )
-        with col3:
-            st.metric("Records per Page", f"{page_size:,}")
-        
-        # Calculate start and end indices
-        start_idx = (page - 1) * page_size
-        end_idx = min(start_idx + page_size, total_rows)
-        
-        # Get the page data
-        page_data = filtered_df_ads.iloc[start_idx:end_idx]
-        
-        st.info(f"📋 **Showing records {start_idx + 1:,} to {end_idx:,} of {total_rows:,}**")
-        
-        # Sort by status_change_date descending before displaying, if column exists
-        if 'created_at' in page_data.columns:
-            # Configure column to display ad_link as clickable links
-            column_config = {
-                "ad_link": st.column_config.LinkColumn(
-                    "Ad_Link",
-                    help="Click to open in Facebook Ads Manager",
-                    display_text="Ad_Link"
-                )
-            }
-            st.dataframe(
-                page_data.sort_values('created_at', ascending=False), 
-                use_container_width=True,
-                column_config=column_config,
-                hide_index=True
-            )
-        else:
-            # Configure column to display ad_link as clickable links
-            column_config = {
-                "ad_link": st.column_config.LinkColumn(
-                    "Ad_Link",
-                    help="Click to open in Facebook Ads Manager",
-                    display_text="Ad_Link"
-                )
-            }
-            st.dataframe(
-                page_data, 
-                use_container_width=True,
-                column_config=column_config,
-                hide_index=True
-            )
-        
-        # Navigation info
-        if total_pages > 1:
-            st.info(f"📄 **Page {page} of {total_pages}** - Use the dropdown above to navigate between pages")
     except Exception as e:
         st.error(f"Error in Raw Dump section: {str(e)}")
         st.info("Please try refreshing the page or contact support if the issue persists.")
