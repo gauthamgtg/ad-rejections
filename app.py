@@ -397,7 +397,8 @@ def redshift_connection(dbname, user, password, host, port):
 # '''
 
 
-ads_data_query = '''SELECT buid,a.ad_account_id,a.ad_id,ad_status,effective_status,a.created_at,edited_at as status_change_date,error_type,error_description,spend
+ads_data_query = '''SELECT buid,a.ad_account_id,a.ad_id,ad_status,effective_status,a.created_at,edited_at as status_change_date,error_type,error_description
+-- ,spend
  FROM
 (
 SELECT a.ad_account_id,ad_id,ad_status,effective_status,edited_at,a.created_at,ad_review_feedback,error_description,error_type
@@ -437,9 +438,9 @@ JOIN zocket_global.fb_child_ad_accounts fcaa
 )a
 where rw=1
 ) a
-left join
-( select ad_id,sum(spend)spend  from zocket_global.fb_ads_age_gender_metrics_v3 
-group by 1)b on a.ad_id=b.ad_id
+-- left join
+-- ( select ad_id,sum(spend)spend  from zocket_global.fb_ads_age_gender_metrics_v3 
+-- group by 1)b on a.ad_id=b.ad_id
 left join zocket_global.fb_child_ad_accounts d on a.ad_account_id = d.ad_account_id
 left join zocket_global.fb_child_business_managers e on e.id = d.app_business_manager_id
 left join 
@@ -673,8 +674,8 @@ with tab1:
             total_rejected = len(df_ads[df_ads['ad_status'] == 'DISAPPROVED'])
             
             # Calculate adspends metrics
-            total_disapproved_adspends = df_ads[df_ads['ad_status'] == 'DISAPPROVED']['spend'].sum() if 'spend' in df_ads.columns else 0
-            total_approved_adspends = df_ads[df_ads['ad_status'] == 'APPROVED']['spend'].sum() if 'spend' in df_ads.columns else 0
+            # total_disapproved_adspends = df_ads[df_ads['ad_status'] == 'DISAPPROVED']['spend'].sum() if 'spend' in df_ads.columns else 0
+            # total_approved_adspends = df_ads[df_ads['ad_status'] == 'APPROVED']['spend'].sum() if 'spend' in df_ads.columns else 0
             
             # Yesterday metrics
             yesterday_ads = len(df_ads_copy[
@@ -686,15 +687,15 @@ with tab1:
             ])
             
             # Yesterday adspends metrics
-            yesterday_disapproved_adspends = df_ads_copy[
-                (df_ads_copy['ad_status'] == 'DISAPPROVED') &
-                (df_ads_copy['status_change_date'].dt.date == yesterday)
-            ]['spend'].sum() if 'spend' in df_ads_copy.columns else 0
-            
-            yesterday_approved_adspends = df_ads_copy[
-                (df_ads_copy['ad_status'] == 'APPROVED') &
-                (df_ads_copy['created_at'].dt.date == yesterday)
-            ]['spend'].sum() if 'spend' in df_ads_copy.columns else 0
+            # yesterday_disapproved_adspends = df_ads_copy[
+            #     (df_ads_copy['ad_status'] == 'DISAPPROVED') &
+            #     (df_ads_copy['status_change_date'].dt.date == yesterday)
+            # ]['spend'].sum() if 'spend' in df_ads_copy.columns else 0
+            # 
+            # yesterday_approved_adspends = df_ads_copy[
+            #     (df_ads_copy['ad_status'] == 'APPROVED') &
+            #     (df_ads_copy['created_at'].dt.date == yesterday)
+            # ]['spend'].sum() if 'spend' in df_ads_copy.columns else 0
             
             # Current month metrics
             current_month_ads = len(df_ads_copy[
@@ -706,15 +707,15 @@ with tab1:
             ])
             
             # Current month adspends metrics
-            current_month_disapproved_adspends = df_ads_copy[
-                (df_ads_copy['ad_status'] == 'DISAPPROVED') &
-                (df_ads_copy['status_change_date'].dt.date >= current_month_start)
-            ]['spend'].sum() if 'spend' in df_ads_copy.columns else 0
-            
-            current_month_approved_adspends = df_ads_copy[
-                (df_ads_copy['ad_status'] == 'APPROVED') &
-                (df_ads_copy['created_at'].dt.date >= current_month_start)
-            ]['spend'].sum() if 'spend' in df_ads_copy.columns else 0
+            # current_month_disapproved_adspends = df_ads_copy[
+            #     (df_ads_copy['ad_status'] == 'DISAPPROVED') &
+            #     (df_ads_copy['status_change_date'].dt.date >= current_month_start)
+            # ]['spend'].sum() if 'spend' in df_ads_copy.columns else 0
+            # 
+            # current_month_approved_adspends = df_ads_copy[
+            #     (df_ads_copy['ad_status'] == 'APPROVED') &
+            #     (df_ads_copy['created_at'].dt.date >= current_month_start)
+            # ]['spend'].sum() if 'spend' in df_ads_copy.columns else 0
             
             # Last 30 days metrics
             last_30_days_ads = len(df_ads_copy[
@@ -726,15 +727,15 @@ with tab1:
             ])
             
             # Last 30 days adspends metrics
-            last_30_days_disapproved_adspends = df_ads_copy[
-                (df_ads_copy['ad_status'] == 'DISAPPROVED') &
-                (df_ads_copy['status_change_date'].dt.date >= thirty_days_ago)
-            ]['spend'].sum() if 'spend' in df_ads_copy.columns else 0
-            
-            last_30_days_approved_adspends = df_ads_copy[
-                (df_ads_copy['ad_status'] == 'APPROVED') &
-                (df_ads_copy['created_at'].dt.date >= thirty_days_ago)
-            ]['spend'].sum() if 'spend' in df_ads_copy.columns else 0
+            # last_30_days_disapproved_adspends = df_ads_copy[
+            #     (df_ads_copy['ad_status'] == 'DISAPPROVED') &
+            #     (df_ads_copy['status_change_date'].dt.date >= thirty_days_ago)
+            # ]['spend'].sum() if 'spend' in df_ads_copy.columns else 0
+            # 
+            # last_30_days_approved_adspends = df_ads_copy[
+            #     (df_ads_copy['ad_status'] == 'APPROVED') &
+            #     (df_ads_copy['created_at'].dt.date >= thirty_days_ago)
+            # ]['spend'].sum() if 'spend' in df_ads_copy.columns else 0
             
             # Top rejected account yesterday
             yesterday_rejected_by_account = df_ads_copy[
@@ -751,26 +752,26 @@ with tab1:
             with col1:
                 st.metric("Total Ads", total_ads)
                 st.metric("Total Rejected", total_rejected)
-                st.metric("Disapproved Adspends", f"${total_disapproved_adspends:,.2f}")
-                st.metric("Approved Adspends", f"${total_approved_adspends:,.2f}")
+                # st.metric("Disapproved Adspends", f"${total_disapproved_adspends:,.2f}")
+                # st.metric("Approved Adspends", f"${total_approved_adspends:,.2f}")
             
             with col2:
                 st.metric("Yesterday Ads", yesterday_ads)
                 st.metric("Yesterday Rejected", yesterday_rejected)
-                st.metric("Yesterday Disapproved Adspends", f"${yesterday_disapproved_adspends:,.2f}")
-                st.metric("Yesterday Approved Adspends", f"${yesterday_approved_adspends:,.2f}")
+                # st.metric("Yesterday Disapproved Adspends", f"${yesterday_disapproved_adspends:,.2f}")
+                # st.metric("Yesterday Approved Adspends", f"${yesterday_approved_adspends:,.2f}")
             
             with col3:
                 st.metric("Current Month Ads", current_month_ads)
                 st.metric("Current Month Rejected", current_month_rejected)
-                st.metric("Current Month Disapproved Adspends", f"${current_month_disapproved_adspends:,.2f}")
-                st.metric("Current Month Approved Adspends", f"${current_month_approved_adspends:,.2f}")
+                # st.metric("Current Month Disapproved Adspends", f"${current_month_disapproved_adspends:,.2f}")
+                # st.metric("Current Month Approved Adspends", f"${current_month_approved_adspends:,.2f}")
             
             with col4:
                 st.metric("Last 30 Days Ads", last_30_days_ads)
                 st.metric("Last 30 Days Rejected", last_30_days_rejected)
-                st.metric("Last 30 Days Disapproved Adspends", f"${last_30_days_disapproved_adspends:,.2f}")
-                st.metric("Last 30 Days Approved Adspends", f"${last_30_days_approved_adspends:,.2f}")
+                # st.metric("Last 30 Days Disapproved Adspends", f"${last_30_days_disapproved_adspends:,.2f}")
+                # st.metric("Last 30 Days Approved Adspends", f"${last_30_days_approved_adspends:,.2f}")
             
             # Top rejected account info
             st.info(f"🔴 **Top Rejected Account Yesterday:** {top_rejected_account_yesterday} ({top_rejected_count_yesterday} rejections)")
@@ -810,8 +811,8 @@ with tab1:
             filtered_total_rejected = len(filtered_df_ads[filtered_df_ads['ad_status'] == 'DISAPPROVED'])
             
             # Calculate filtered adspends metrics
-            filtered_total_disapproved_adspends = filtered_df_ads[filtered_df_ads['ad_status'] == 'DISAPPROVED']['spend'].sum() if 'spend' in filtered_df_ads.columns else 0
-            filtered_total_approved_adspends = filtered_df_ads[filtered_df_ads['ad_status'] == 'APPROVED']['spend'].sum() if 'spend' in filtered_df_ads.columns else 0
+            # filtered_total_disapproved_adspends = filtered_df_ads[filtered_df_ads['ad_status'] == 'DISAPPROVED']['spend'].sum() if 'spend' in filtered_df_ads.columns else 0
+            # filtered_total_approved_adspends = filtered_df_ads[filtered_df_ads['ad_status'] == 'APPROVED']['spend'].sum() if 'spend' in filtered_df_ads.columns else 0
             
             # Yesterday metrics for filtered data
             filtered_yesterday_ads = len(filtered_df_ads_copy[
@@ -823,15 +824,15 @@ with tab1:
             ])
             
             # Yesterday adspends metrics for filtered data
-            filtered_yesterday_disapproved_adspends = filtered_df_ads_copy[
-                (filtered_df_ads_copy['ad_status'] == 'DISAPPROVED') &
-                (filtered_df_ads_copy['status_change_date'].dt.date == yesterday)
-            ]['spend'].sum() if 'spend' in filtered_df_ads_copy.columns else 0
-            
-            filtered_yesterday_approved_adspends = filtered_df_ads_copy[
-                (filtered_df_ads_copy['ad_status'] == 'APPROVED') &
-                (filtered_df_ads_copy['created_at'].dt.date == yesterday)
-            ]['spend'].sum() if 'spend' in filtered_df_ads_copy.columns else 0
+            # filtered_yesterday_disapproved_adspends = filtered_df_ads_copy[
+            #     (filtered_df_ads_copy['ad_status'] == 'DISAPPROVED') &
+            #     (filtered_df_ads_copy['status_change_date'].dt.date == yesterday)
+            # ]['spend'].sum() if 'spend' in filtered_df_ads_copy.columns else 0
+            # 
+            # filtered_yesterday_approved_adspends = filtered_df_ads_copy[
+            #     (filtered_df_ads_copy['ad_status'] == 'APPROVED') &
+            #     (filtered_df_ads_copy['created_at'].dt.date == yesterday)
+            # ]['spend'].sum() if 'spend' in filtered_df_ads_copy.columns else 0
             
             # Current month metrics for filtered data
             filtered_current_month_ads = len(filtered_df_ads_copy[
@@ -843,15 +844,15 @@ with tab1:
             ])
             
             # Current month adspends metrics for filtered data
-            filtered_current_month_disapproved_adspends = filtered_df_ads_copy[
-                (filtered_df_ads_copy['ad_status'] == 'DISAPPROVED') &
-                (filtered_df_ads_copy['status_change_date'].dt.date >= current_month_start)
-            ]['spend'].sum() if 'spend' in filtered_df_ads_copy.columns else 0
-            
-            filtered_current_month_approved_adspends = filtered_df_ads_copy[
-                (filtered_df_ads_copy['ad_status'] == 'APPROVED') &
-                (filtered_df_ads_copy['created_at'].dt.date >= current_month_start)
-            ]['spend'].sum() if 'spend' in filtered_df_ads_copy.columns else 0
+            # filtered_current_month_disapproved_adspends = filtered_df_ads_copy[
+            #     (filtered_df_ads_copy['ad_status'] == 'DISAPPROVED') &
+            #     (filtered_df_ads_copy['status_change_date'].dt.date >= current_month_start)
+            # ]['spend'].sum() if 'spend' in filtered_df_ads_copy.columns else 0
+            # 
+            # filtered_current_month_approved_adspends = filtered_df_ads_copy[
+            #     (filtered_df_ads_copy['ad_status'] == 'APPROVED') &
+            #     (filtered_df_ads_copy['created_at'].dt.date >= current_month_start)
+            # ]['spend'].sum() if 'spend' in filtered_df_ads_copy.columns else 0
             
             # Last 30 days metrics for filtered data
             filtered_last_30_days_ads = len(filtered_df_ads_copy[
@@ -863,15 +864,15 @@ with tab1:
             ])
             
             # Last 30 days adspends metrics for filtered data
-            filtered_last_30_days_disapproved_adspends = filtered_df_ads_copy[
-                (filtered_df_ads_copy['ad_status'] == 'DISAPPROVED') &
-                (filtered_df_ads_copy['status_change_date'].dt.date >= thirty_days_ago)
-            ]['spend'].sum() if 'spend' in filtered_df_ads_copy.columns else 0
-            
-            filtered_last_30_days_approved_adspends = filtered_df_ads_copy[
-                (filtered_df_ads_copy['ad_status'] == 'APPROVED') &
-                (filtered_df_ads_copy['created_at'].dt.date >= thirty_days_ago)
-            ]['spend'].sum() if 'spend' in filtered_df_ads_copy.columns else 0
+            # filtered_last_30_days_disapproved_adspends = filtered_df_ads_copy[
+            #     (filtered_df_ads_copy['ad_status'] == 'DISAPPROVED') &
+            #     (filtered_df_ads_copy['status_change_date'].dt.date >= thirty_days_ago)
+            # ]['spend'].sum() if 'spend' in filtered_df_ads_copy.columns else 0
+            # 
+            # filtered_last_30_days_approved_adspends = filtered_df_ads_copy[
+            #     (filtered_df_ads_copy['ad_status'] == 'APPROVED') &
+            #     (filtered_df_ads_copy['created_at'].dt.date >= thirty_days_ago)
+            # ]['spend'].sum() if 'spend' in filtered_df_ads_copy.columns else 0
             
             # Top rejected account yesterday for filtered data
             filtered_yesterday_rejected_by_account = filtered_df_ads_copy[
@@ -888,26 +889,26 @@ with tab1:
             with col1:
                 st.metric("Filtered Total Ads", filtered_total_ads)
                 st.metric("Filtered Total Rejected", filtered_total_rejected)
-                st.metric("Filtered Disapproved Adspends", f"${filtered_total_disapproved_adspends:,.2f}")
-                st.metric("Filtered Approved Adspends", f"${filtered_total_approved_adspends:,.2f}")
+                # st.metric("Filtered Disapproved Adspends", f"${filtered_total_disapproved_adspends:,.2f}")
+                # st.metric("Filtered Approved Adspends", f"${filtered_total_approved_adspends:,.2f}")
             
             with col2:
                 st.metric("Filtered Yesterday Ads", filtered_yesterday_ads)
                 st.metric("Filtered Yesterday Rejected", filtered_yesterday_rejected)
-                st.metric("Filtered Yesterday Disapproved Adspends", f"${filtered_yesterday_disapproved_adspends:,.2f}")
-                st.metric("Filtered Yesterday Approved Adspends", f"${filtered_yesterday_approved_adspends:,.2f}")
+                # st.metric("Filtered Yesterday Disapproved Adspends", f"${filtered_yesterday_disapproved_adspends:,.2f}")
+                # st.metric("Filtered Yesterday Approved Adspends", f"${filtered_yesterday_approved_adspends:,.2f}")
             
             with col3:
                 st.metric("Filtered Current Month Ads", filtered_current_month_ads)
                 st.metric("Filtered Current Month Rejected", filtered_current_month_rejected)
-                st.metric("Filtered Current Month Disapproved Adspends", f"${filtered_current_month_disapproved_adspends:,.2f}")
-                st.metric("Filtered Current Month Approved Adspends", f"${filtered_current_month_approved_adspends:,.2f}")
+                # st.metric("Filtered Current Month Disapproved Adspends", f"${filtered_current_month_disapproved_adspends:,.2f}")
+                # st.metric("Filtered Current Month Approved Adspends", f"${filtered_current_month_approved_adspends:,.2f}")
             
             with col4:
                 st.metric("Filtered Last 30 Days Ads", filtered_last_30_days_ads)
                 st.metric("Filtered Last 30 Days Rejected", filtered_last_30_days_rejected)
-                st.metric("Filtered Last 30 Days Disapproved Adspends", f"${filtered_last_30_days_disapproved_adspends:,.2f}")
-                st.metric("Filtered Last 30 Days Approved Adspends", f"${filtered_last_30_days_approved_adspends:,.2f}")
+                # st.metric("Filtered Last 30 Days Disapproved Adspends", f"${filtered_last_30_days_disapproved_adspends:,.2f}")
+                # st.metric("Filtered Last 30 Days Approved Adspends", f"${filtered_last_30_days_approved_adspends:,.2f}")
             
             # Top rejected account info for filtered data
             st.info(f"🔴 **Top Rejected Account Yesterday (Filtered):** {filtered_top_rejected_account_yesterday} ({filtered_top_rejected_count_yesterday} rejections)")
