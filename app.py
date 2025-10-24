@@ -28,20 +28,38 @@ logging.getLogger("botocore").setLevel(logging.ERROR)
 # Set environment variable to suppress Streamlit logs
 os.environ["STREAMLIT_LOGGER_LEVEL"] = "error"
 
-client = boto3.client(
-    "secretsmanager",
-    region_name=st.secrets["AWS_DEFAULT_REGION"],
-    aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
-    aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"]
-)
+def get_aws_client():
+    """Get AWS client with proper error handling for Streamlit context"""
+    try:
+        return boto3.client(
+            "secretsmanager",
+            region_name=st.secrets["AWS_DEFAULT_REGION"],
+            aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
+            aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"]
+        )
+    except Exception as e:
+        st.error(f"Error accessing AWS secrets: {str(e)}")
+        return None
 
 def get_secret(secret_name):
-    # Retrieve the secret value
-    response = client.get_secret_value(SecretId=secret_name)
-    return json.loads(response["SecretString"])
+    """Retrieve secret value from AWS Secrets Manager"""
+    client = get_aws_client()
+    if client is None:
+        return None
+    
+    try:
+        response = client.get_secret_value(SecretId=secret_name)
+        return json.loads(response["SecretString"])
+    except Exception as e:
+        st.error(f"Error retrieving secret '{secret_name}': {str(e)}")
+        return None
 
-# Replace 'your-secret-name' with the actual secret name in AWS Secrets Manager
+# Initialize secrets with error handling
 secret = get_secret("G-streamlit-KAT")
+if secret is None:
+    st.error("Failed to retrieve database secrets. Please check your AWS configuration.")
+    st.stop()
+
 db = secret["db"]
 name = secret["name"]
 passw = secret["passw"]
