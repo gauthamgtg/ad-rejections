@@ -91,7 +91,8 @@ def redshift_connection(dbname, user, password, host, port):
         @wraps(func)
         def wrapper(*args, **kwargs):
             try:
-
+                logging.info(f"Attempting to connect to database: {host}:{port}/{dbname} as user {user}")
+                
                 connection = psycopg2.connect(
                     dbname=dbname,
                     user=user,
@@ -99,17 +100,31 @@ def redshift_connection(dbname, user, password, host, port):
                     host=host,
                     port=port
                 )
-
+                
+                logging.info("Database connection established successfully")
                 cursor = connection.cursor()
 
+                logging.info("Executing query...")
                 result = func(*args, connection=connection, cursor=cursor, **kwargs)
+                logging.info("Query executed successfully")
 
                 cursor.close()
                 connection.close()
+                logging.info("Database connection closed")
 
                 return result
 
+            except psycopg2.OperationalError as e:
+                logging.error(f"Database operational error: {str(e)}")
+                st.error(f"Database connection error: {str(e)}")
+                return None
+            except psycopg2.Error as e:
+                logging.error(f"Database error: {str(e)}")
+                st.error(f"Database error: {str(e)}")
+                return None
             except Exception as e:
+                logging.error(f"Unexpected error in database connection: {str(e)}")
+                st.error(f"Unexpected error: {str(e)}")
                 return None
 
         return wrapper
@@ -176,41 +191,69 @@ left join
 @st.cache_data(ttl=3600)  # Cache for 1 hour to reduce database load
 @redshift_connection(db,name,passw,server,port)
 def execute_query(connection, cursor,query):
-
-    cursor.execute(query)
-    column_names = [desc[0] for desc in cursor.description]
-    result = pd.DataFrame(cursor.fetchall(), columns=column_names)
-
-    return result
+    try:
+        logging.info(f"Executing query with {len(query)} characters")
+        cursor.execute(query)
+        logging.info("Fetching results...")
+        column_names = [desc[0] for desc in cursor.description]
+        logging.info(f"Query returned columns: {column_names}")
+        
+        results = cursor.fetchall()
+        logging.info(f"Query returned {len(results)} rows")
+        
+        result = pd.DataFrame(results, columns=column_names)
+        logging.info(f"DataFrame created with shape: {result.shape}")
+        
+        return result
+    except Exception as e:
+        logging.error(f"Error executing query: {str(e)}")
+        st.error(f"Query execution error: {str(e)}")
+        raise
 
 # Load data with error handling and progress indication
 try:
+    logging.info("Starting data load process")
+    
     progress_bar = st.progress(0)
     status_text = st.empty()
     
     status_text.text("Connecting to database...")
     progress_bar.progress(25)
     
+    logging.info("Calling execute_query...")
     df_ads = execute_query(query=ads_data_query)
+    logging.info(f"execute_query returned: {type(df_ads)}")
+    
     progress_bar.progress(75)
     
     status_text.text("Processing data...")
     
-    if df_ads is None or df_ads.empty:
+    if df_ads is None:
+        logging.error("Query returned None - database connection or query failed")
         st.error("Failed to load ads data. Please check your database connection.")
         st.stop()
     
-    progress_bar.progress(100)
-    status_text.text("Data loaded successfully!")
+    if df_ads.empty:
+        logging.warning("Query returned empty DataFrame - no data found")
+        st.warning("No ads data found in the database for today's date.")
+        # Don't stop, just show a message
+        st.info("This could be because there are no ads edited today, or the query returned no results.")
     
-    # Clear progress indicators after a short delay
-    import time
-    time.sleep(0.5)
-    progress_bar.empty()
-    status_text.empty()
+    if df_ads is not None and not df_ads.empty:
+        logging.info(f"Successfully loaded {len(df_ads)} rows of data")
+        progress_bar.progress(100)
+        status_text.text("Data loaded successfully!")
+        
+        # Clear progress indicators after a short delay
+        import time
+        time.sleep(0.5)
+        progress_bar.empty()
+        status_text.empty()
     
 except Exception as e:
+    logging.error(f"Error in data loading section: {str(e)}", exc_info=True)
     st.error(f"Error loading data: {str(e)}")
+    st.exception(e)
     st.stop()
 
 # Function to generate Facebook Ads Manager URL
