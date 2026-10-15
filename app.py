@@ -12,6 +12,7 @@ import boto3
 import json
 import logging
 import os
+import time
 
 # Suppress Streamlit internal logs
 logging.getLogger("streamlit").setLevel(logging.ERROR)
@@ -33,71 +34,106 @@ def get_aws_client():
     try:
         return boto3.client(
             "secretsmanager",
-            region_name=st.secrets["AWS_DEFAULT_REGION"],
-            aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
-            aws_secret_access_key=st.secrets["AWS_SECRET_ACCESS_KEY"]
+            region_name=st.secrets.get("AWS_DEFAULT_REGION", "us-east-1"),
+            aws_access_key_id=st.secrets.get("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=st.secrets.get("AWS_SECRET_ACCESS_KEY")
         )
     except Exception as e:
-        st.error(f"Error accessing AWS secrets: {str(e)}")
+        logging.error(f"Error accessing AWS secrets: {str(e)}")
         return None
 
-def get_secret(secret_name):
-    """Retrieve secret value from AWS Secrets Manager"""
-    client = get_aws_client()
-    if client is None:
-        return None
+def get_secret(secret_name, max_retries=3):
+    """Retrieve secret value from AWS Secrets Manager with retry logic"""
+    for attempt in range(max_retries):
+        client = get_aws_client()
+        if client is None:
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)  # Exponential backoff
+                continue
+            return None
+        
+        try:
+            response = client.get_secret_value(SecretId=secret_name)
+            return json.loads(response["SecretString"])
+        except Exception as e:
+            logging.error(f"Error retrieving secret '{secret_name}' (attempt {attempt + 1}): {str(e)}")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)  # Exponential backoff
+                continue
+            return None
+    return None
+
+# Initialize secrets with error handling - use session state to avoid repeated calls
+if 'db_config' not in st.session_state:
+    st.set_page_config(
+        page_title="Ads Dashboard",
+        page_icon=":bar_chart:",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
     
-    try:
-        response = client.get_secret_value(SecretId=secret_name)
-        return json.loads(response["SecretString"])
-    except Exception as e:
-        st.error(f"Error retrieving secret '{secret_name}': {str(e)}")
-        return None
-
-# Initialize secrets with error handling
-secret = get_secret("G-streamlit-KAT")
-if secret is None:
-    st.error("Failed to retrieve database secrets. Please check your AWS configuration.")
-    st.stop()
-
-db = secret["db"]
-name = secret["name"]
-passw = secret["passw"]
-server = secret["server"]
-port = secret["port"]
-stripe_key = secret["stripe"]
-
-
-st.set_page_config( page_title = "Ads Dashboard",
-    page_icon=":bar_chart:",
-    layout="wide",
-    initial_sidebar_state="expanded")
+    secret = get_secret("G-streamlit-KAT")
+    if secret is None:
+        st.error("⚠️ Failed to retrieve database secrets. Please check your AWS configuration.")
+        st.info("The application will not function properly until database credentials are available.")
+        st.session_state.db_config = None
+        db = name = passw = server = port = stripe_key = None
+    else:
+        st.session_state.db_config = {
+            'db': secret.get("db"),
+            'name': secret.get("name"),
+            'passw': secret.get("passw"),
+            'server': secret.get("server"),
+            'port': secret.get("port"),
+            'stripe': secret.get("stripe")
+        }
+        db = st.session_state.db_config['db']
+        name = st.session_state.db_config['name']
+        passw = st.session_state.db_config['passw']
+        server = st.session_state.db_config['server']
+        port = st.session_state.db_config['port']
+        stripe_key = st.session_state.db_config['stripe']
+        st.success("✅ Successfully connected to the database!")
+else:
+    if st.session_state.db_config is None:
+        st.error("⚠️ Database configuration not available. Please refresh the page.")
+        db = name = passw = server = port = stripe_key = None
+    else:
+        db = st.session_state.db_config['db']
+        name = st.session_state.db_config['name']
+        passw = st.session_state.db_config['passw']
+        server = st.session_state.db_config['server']
+        port = st.session_state.db_config['port']
+        stripe_key = st.session_state.db_config['stripe']
 
 # Configure Streamlit to handle larger datasets and improve WebSocket stability
-# This increases the message size limit to handle large dataframes
-st.config.set_option('server.maxMessageSize', 1000)
+# Match the config.toml setting (500) for consistency
+st.config.set_option('server.maxMessageSize', 500)
 
 # Additional WebSocket stability configurations
 st.config.set_option('server.enableWebsocketCompression', True)
 st.config.set_option('server.enableCORS', False)
 st.config.set_option('server.maxUploadSize', 200)
 
-# st.toast('Successfully connected to the database!!', icon='😍')
-
-st.write("Successfully connected to the database!")
+# Connection status is now shown conditionally above based on db_config
 
 def redshift_connection(dbname, user, password, host, port):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
+            # Check if database config is available
+            if dbname is None or user is None or password is None or host is None or port is None:
+                logging.error("Database configuration is missing")
+                return None
+                
             try:
-
                 connection = psycopg2.connect(
                     dbname=dbname,
                     user=user,
                     password=password,
                     host=host,
-                    port=port
+                    port=port,
+                    connect_timeout=10  # Add connection timeout
                 )
 
                 cursor = connection.cursor()
@@ -109,7 +145,11 @@ def redshift_connection(dbname, user, password, host, port):
 
                 return result
 
+            except psycopg2.OperationalError as e:
+                logging.error(f"Database operational error: {str(e)}")
+                return None
             except Exception as e:
+                logging.error(f"Database connection error: {str(e)}")
                 return None
 
         return wrapper
@@ -498,8 +538,8 @@ try:
     status_text.text("Processing data...")
     
     if df_ads is None or df_ads.empty:
-        st.error("Failed to load ads data. Please check your database connection.")
-        st.stop()
+        st.warning("⚠️ Failed to load ads data or no data available. Please check your database connection.")
+        df_ads = pd.DataFrame()  # Initialize empty dataframe to prevent crashes
     
     progress_bar.progress(100)
     status_text.text("Data loaded successfully!")
@@ -512,7 +552,8 @@ try:
     
 except Exception as e:
     st.error(f"Error loading data: {str(e)}")
-    st.stop()
+    logging.error(f"Error loading data: {str(e)}", exc_info=True)
+    df_ads = pd.DataFrame()  # Initialize empty dataframe to prevent crashes
 
 # Function to generate Facebook Ads Manager URL
 def generate_ad_link(ad_account_id, ad_id):
@@ -1060,8 +1101,9 @@ with tab2:
                 help="Download the filtered data as Excel file"
             )
         
-        st.success("✅ **Performance Optimized:** Table display has been removed to improve loading speed. Use the download buttons above to access the complete dataset.")
-        
+        # st.success("✅ **Performance Optimized:** Table display has been removed to improve loading speed. Use the download buttons above to access the complete dataset.")
+        st.dataframe(filtered_df_ads, use_container_width=True, hide_index=True)
+
     except Exception as e:
         st.error(f"Error in Raw Dump section: {str(e)}")
         st.info("Please try refreshing the page or contact support if the issue persists.")
